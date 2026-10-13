@@ -220,6 +220,7 @@
   "https://en.wikipedia.org/wiki/Category:WikiProjects": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Chess": "2026-08-14T13:11:48Z",
   "https://en.wikipedia.org/wiki/Chess?useformat=mobile": "2026-08-10T12:57:50Z",
+  "https://en.wikipedia.org/wiki/File:Wiki.png": "2026-10-13T12:31:59Z",
   "https://en.wikipedia.org/wiki/He_Tingbo": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Page": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Pyrrhus_Concer": "2026-08-10T12:57:50Z",
@@ -805,7 +806,7 @@
   "https://your-tool.toolforge.org": "2026-08-10T12:57:50Z",
   "https://\u0440\u0443.wikipedia.org": "2026-09-29T22:23:29Z"
  },
- "generated_at": "2026-10-09T10:07:13Z",
+ "generated_at": "2026-10-13T12:31:59Z",
  "generator": "scripts/refresh-url-registry.py",
  "skip": {
   "example": "illustrative placeholder URLs",
@@ -1035,6 +1036,7 @@
   "https://en.wikipedia.org/wiki/Category:WikiProjects": 200,
   "https://en.wikipedia.org/wiki/Chess": 200,
   "https://en.wikipedia.org/wiki/Chess?useformat=mobile": 200,
+  "https://en.wikipedia.org/wiki/File:Wiki.png": 200,
   "https://en.wikipedia.org/wiki/He_Tingbo": -1,
   "https://en.wikipedia.org/wiki/Page": 200,
   "https://en.wikipedia.org/wiki/Pyrrhus_Concer": 200,

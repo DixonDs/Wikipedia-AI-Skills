@@ -13,7 +13,8 @@ skill_discovery_hints:
   - keywords: ["browser app", "WebGL", "Canvas", "Pannellum", "360 photo", "photosphere", "panorama viewer"]
   - keywords: ["download", "download image", "photo download", "batch download", "gallery", "local host", "self host", "serve locally"]
   - keywords: ["Commons page", "Commons URL", "wiki/File", "get image from", "pull from Commons"]
-last_verified: 2026-06-20
+  - keywords: ["paste file list", "parse file references", "normalise title", "comma in filename", "titles="]
+last_verified: 2026-10-13
 ---
 
 > ⚠️ **Prefer `Special:FilePath?width=` over computed hash URLs.** Direct `upload.wikimedia.org/wikipedia/commons/{hash}/{file}` URLs can
@@ -47,6 +48,9 @@ This skill covers every method for resolving a `File:` reference to a working UR
 | Cache-busted URL (latest version) | `timestamp` from API + `?v=` param | Append `?v={unix timestamp}` to URL | ⭐⭐ |
 | Same-origin for WebGL/Canvas | Proxy through own server | Fetch → cache locally → serve from own domain | ⭐⭐⭐ |
 | Batch resolution | Action API multi-title query | `titles=File:A.jpg\|File:B.jpg\|File:C.jpg` | ⭐⭐ |
+| **Pasted list of references** (names, URLs, wikitext) | SOP 6: normalise to titles first | `python3 scripts/parse-file-refs.py refs.txt` | ⭐ |
+
+Multi-title queries are **pipe-separated**; a comma is not a separator and Commons file names may contain commas — see [SOP 6](#sop-6-from-pasted-references-to-file-titles).
 
 ---
 
@@ -105,7 +109,7 @@ The `Special:FilePath/` page redirects to the file's canonical URL. This is the 
 
 ### How It Works
 
-`https://commons.wikimedia.org/wiki/Special:FilePath/File:Example.jpg` returns an HTTP **302 redirect** to the canonical `upload.wikimedia.org` URL. The `/w/` path also works:
+`https://commons.wikimedia.org/wiki/Special:FilePath/File:Example.jpg` returns an HTTP **302 redirect** to the canonical `upload.wikimedia.org` URL — or a **301** when the name needs normalising (spaces vs underscores), so accept both. The `/w/` path also works:
 
 ```
 https://commons.wikimedia.org/w/index.php?title=Special:FilePath/File:Example.jpg
@@ -500,6 +504,82 @@ async function resolveFileAcrossWikis(filename, wikiPrefix = 'commons') {
 
 ---
 
+## SOP 6: From Pasted References to `File:` Titles
+
+Users paste whatever their clipboard holds — a bare filename, a wikitext embed, a page URL, a thumbnail URL. **Normalise every line to a `File:` title first**, then resolve with SOP 1–5. A pasted string is not a title until you make it one.
+
+### 1. Recognise the forms
+
+| Pasted reference | → title | Note |
+|------|---------|------|
+| `Foo.jpg` | `File:Foo.jpg` | bare name from a list or spreadsheet column |
+| `File:Foo.jpg`, `Image:Foo.jpg` | unchanged | prefix casing is folded by MediaWiki |
+| `[[File:Foo.jpg\|thumb\|Caption, with commas]]` | `File:Foo.jpg` | cut at the first `\|` |
+| `https://commons.wikimedia.org/wiki/File:Example.jpg` | `File:Example.jpg` | `%`-decode, `_` → space |
+| `…/w/index.php?title=File:Foo.jpg` | `File:Foo.jpg` | take the **query** parameter, not the path |
+| `…/wiki/Special:FilePath/Foo.jpg`, `…/Special:Redirect/file/Foo.jpg` | `File:Foo.jpg` | strip a leading `File:` from the tail |
+| `https://upload.wikimedia.org/wikipedia/commons/{h}/{h}/Foo.jpg` | `File:Foo.jpg` | the `/wikipedia/<project>/` segment names the wiki (SOP 5) |
+| `…/thumb/{h}/{h}/Foo.jpg/640px-Foo.jpg` (also `thumb.wikimedia.org`) | `File:Foo.jpg` | strip the `NNNpx-` prefix |
+| `https://en.wikipedia.org/wiki/File:Wiki.png` | `File:Wiki.png` **on en.wikipedia.org** | resolve with that wiki's `api.php` |
+
+### 2. Normalise with stdlib Python
+
+`scripts/parse-file-refs.py` implements this table (stdlib, argparse; `--json` adds the wiki, `--default-wiki` sets what bare names belong to):
+
+```console
+$ printf '%s\n' "Foo.jpg" "https://en.wikipedia.org/wiki/File:Wiki.png" | python3 scripts/parse-file-refs.py --json
+[
+  {"raw": "Foo.jpg", "title": "File:Foo.jpg", "wiki": "commons.wikimedia.org"},
+  {"raw": "https://en.wikipedia.org/wiki/File:Wiki.png", "title": "File:Wiki.png", "wiki": "en.wikipedia.org"}
+]
+$ python3 scripts/parse-file-refs.py "File:MKr377445 Susanne Wuest (In die Sonne schauen, Cannes 2025).jpg"
+File:MKr377445 Susanne Wuest (In die Sonne schauen, Cannes 2025).jpg
+```
+
+Unparseable lines and characters that cannot appear in a title go to stderr and exit code 1 — never a silent drop.
+
+### 3. Batch per wiki, joined with `|`
+
+```python
+import json
+import urllib.parse
+import urllib.request
+
+def resolve(entries, thumb_width=640):
+    """entries: [{"title": "File:Foo.jpg", "wiki": "commons.wikimedia.org"}, ...]"""
+    out = {}
+    for wiki in {e["wiki"] for e in entries}:
+        titles = [e["title"] for e in entries if e["wiki"] == wiki]
+        params = urllib.parse.urlencode({
+            "action": "query", "format": "json", "formatversion": "2", "redirects": 1,
+            "prop": "imageinfo", "iiprop": "url|size|mime|sha1|extmetadata",
+            "iiurlwidth": thumb_width,
+            "titles": "|".join(titles),          # "|", never ","
+        })
+        req = urllib.request.Request(
+            f"https://{wiki}/w/api.php?{params}",
+            headers={"User-Agent": "YourTool/1.0 (contact) ProjectName/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.load(resp)
+        # key by (wiki, page["title"]) and map query.normalized / query.redirects back onto
+        # the string the user pasted, so the report can show "pasted X -> resolved to Y"
+        for page in data.get("query", {}).get("pages", []):
+            out[(wiki, page["title"])] = (page.get("imageinfo") or [{}])[0]
+    return out
+```
+
+### Pitfalls
+
+- **Never split a pasted list on commas or semicolons.** Commas are legal in Commons file names, and `titles=` does not treat a comma as a separator: `titles=File:A.jpg,File:B.jpg` returns **one** page titled `File:A.jpg,File:B.jpg` — HTTP 200, no warning (measured 2026-10-13). Join batches with `|`. Split a line only when what follows a separator is clearly a new entry (a `File:`/`Image:`/`http`/`[[` prefix, or a piece that itself ends in a media extension).
+- **`#` silently truncates.** `File:Example#1.jpg` normalises to `File:Example`; everything after `#` is dropped. Truncate deliberately and report it. Same rule for a file-page link pasted with a fragment (`…/File:Foo.jpg#/media/File:Bar.jpg`).
+- **MediaWiki title characters are limited.** `# < > [ ] | { }` cannot appear in a title — upload-time rules live in the `pattypan` skill. A pasted name containing one cannot exist, so say that instead of reporting a bare "not found".
+- **`upload.wikimedia.org/wikipedia/<project>/…` names the wiki** (`commons`, `en`, `de`, `meta`, `species`…). A file on `en.wikipedia.org` is not on Commons — query that wiki's `api.php` (SOP 5).
+- **Namespace aliases are per-wiki.** On Commons only `File:`/`Image:` resolve; `Datei:`, `Fichier:`, `Archivo:` are de/fr/es aliases and come back unresolved if you send them to Commons.
+- **`Special:FilePath/` answers 301 *or* 302** — 301 when the name needs normalising (spaces vs underscores), 302 otherwise. Check both, and strip a duplicated `File:` prefix: `Special:FilePath/File:File:X.jpg` redirects to a wrong name.
+- **Deduplicate on `(wiki, case-folded title)`** before batching. A typical paste contains the same file as a bare name, a URL, and a thumbnail URL; pageids are only unique per wiki.
+
+---
+
 ## Reference: URL Patterns Cheat Sheet
 
 | What | URL Pattern |
@@ -528,6 +608,7 @@ async function resolveFileAcrossWikis(filename, wikiPrefix = 'commons') {
 ## See Also
 
 - **[wikimedia-commons-thumbnails](../wikimedia-commons-thumbnails/SKILL.md)** — Full thumbnail URL construction, responsive sizes, format conversion
+- **[pattypan](../pattypan/SKILL.md)** — Filename validation rules (`# < > [ ] | { }` are rejected, `: / \` are converted) for names you are about to create or check
 - **[wikimedia-commons](../wikimedia-commons/SKILL.md)** — File search, metadata, upload, categories
 - **[wikimedia-api-access](../wikimedia-api-access/SKILL.md)** — User-Agent, rate limiting, error handling
 - **CAVEATS.md in the Photosphere Tours project** — Real-world gotchas from a browser app that heavily uses file resolution
