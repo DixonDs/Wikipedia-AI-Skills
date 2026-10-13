@@ -46,7 +46,7 @@
   "https://api.wikimedia.org/service/lw/inference/v1/models/enwiki-goodfaith:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/langid:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1": "2026-08-16T03:45:22Z",
-  "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1/chat/completions": "2026-09-11T10:35:22Z",
+  "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1/chat/completions": "2026-10-13T14:43:26Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/outlink-topic-model:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/readability:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/reference-need:predict": "2026-08-10T12:57:50Z",
@@ -806,7 +806,7 @@
   "https://your-tool.toolforge.org": "2026-08-10T12:57:50Z",
   "https://\u0440\u0443.wikipedia.org": "2026-09-29T22:23:29Z"
  },
- "generated_at": "2026-10-13T12:31:59Z",
+ "generated_at": "2026-10-13T14:43:25Z",
  "generator": "scripts/refresh-url-registry.py",
  "skip": {
   "example": "illustrative placeholder URLs",
@@ -1649,5 +1649,5 @@
   "https://your-tool.toolforge.org": -1,
   "https://\u0440\u0443.wikipedia.org": 0
  },
- "user_agent": "wikipedia-ai-skills-url-registry/1.0 (https://github.com/fuzheado/Wikipedia-AI-Skills)"
+ "user_agent": "wikipedia-ai-skills-url-registry/1.0 (scheduled GitHub Action; https://github.com/fuzheado/Wikipedia-AI-Skills)"
 }
