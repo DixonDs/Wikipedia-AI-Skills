@@ -8,7 +8,7 @@ skill_discovery_hints:
   - keywords: ["Toolforge", "tool hosting", "Kubernetes", "web service", "cron job", "deploy"]
   - keywords: ["toolsadmin", "become", "webservice", "toolforge jobs"]
   - keywords: ["CDN", "cdnjs", "tools-static", "privacy-preserving CDN", "content delivery", "third-party script", "external CDN tracking"]
-last_verified: 2026-10-05
+last_verified: 2026-10-14
 ---
 
 Toolforge (formerly Wikimedia Tool Labs) is a cloud hosting platform for community-developed tools that interact with Wikimedia wikis and data. This skill covers account setup, service management, deployment, and debugging.
@@ -565,6 +565,27 @@ https://packages.ubuntu.com/noble/.
    ssh user@login.toolforge.org "sudo -niu tools.my-tool-name webservice restart"
    ```
 
+   **The semicolon is the bug, not `become`.** Passing the command as an *argument* is
+   fine, because `become` forwards its arguments to `sudo`. Both of these run as the
+   tool:
+
+   ```bash
+   # ✅ becomes `exec sudo -niu tools.TOOL CMD`
+   ssh user@login.toolforge.org "become my-tool-name webservice restart"
+   ```
+
+   Measured on `dev.toolforge.org` (2026-10-14), same tool and command:
+
+   | shape | expands to | who runs the command |
+   |---|---|---|
+   | `become TOOL CMD…` | `exec sudo -niu tools.TOOL CMD…` | the tool — `uid=58240(tools.wikiportraits-eval)` |
+   | `become TOOL; CMD…` | `become TOOL` (no args → sudo shell), then `CMD` in the parent shell | **you** — `uid=3522(alih)` |
+
+   `become` is a thin wrapper (`/usr/bin/become`) that resolves the `tools.` prefix from
+   `/etc/wmcs-project`, checks group membership, then `exec`s `sudo -niu`. So over SSH
+   prefer `sudo -niu tools.<tool> <cmd>` — it cannot hit the chaining trap — but do not
+   "fix" an existing `become <tool> <cmd>`, which already runs as the tool.
+
 2. **SSH key expiry** — Toolforge SSH keys expire after a period. If you get permission denied, regenerate your key in the admin console and re-add it to `ssh-agent`.
 
 3. **NFS latency** — `/data/project/` is on NFS. File operations can be slow. Avoid frequent small writes. Use local `/tmp/` for temporary files and move results to NFS only when needed.
@@ -592,7 +613,7 @@ https://packages.ubuntu.com/noble/.
 
 11. **Build Service: NFS and $HOME** — Build Service containers do not have NFS mounted by default. Use `--mount=all` to mount it. Inside the container, `$HOME` does not point to `/data/project/<tool>/` — use the `$TOOL_DATA_DIR` environment variable instead for tool home directory paths.
 
-12. **Wait ~1 minute after tool creation** before `become` works. Use `sudo -u` as an immediate workaround.
+12. **`become` needs a fresh login, not a wait.** A newly created tool's group membership is only in groups you picked up *at login*, so the usual symptom is `become` saying *"You were added to the group tools.X after you started this login session. You need to log out and in again"*. Reconnect (a new SSH session) rather than waiting; `sudo -niu tools.<tool> <cmd>` has the same constraint.
 
 13. **Refs vary between browser sessions** — When using Playwright or browser automation for toolsadmin, always snapshot to read the current accessibility tree instead of hardcoding element refs.
 
@@ -624,13 +645,13 @@ https://packages.ubuntu.com/noble/.
 rsync -avz ./my-web-app/ user@login.toolforge.org:/data/project/my-web-tool/
 
 # 3. Set environment variables
-ssh user@login.toolforge.org "become my-web-tool; toolforge envvars create API_KEY your-api-key-here"
+ssh user@login.toolforge.org "sudo -niu tools.my-web-tool toolforge envvars create API_KEY your-api-key-here"
 
 # 4. Start web service
-ssh user@login.toolforge.org "become my-web-tool; webservice --backend=kubernetes python3.11 start"
+ssh user@login.toolforge.org "sudo -niu tools.my-web-tool webservice --backend=kubernetes python3.11 start"
 
 # 5. Verify it's running
-ssh user@login.toolforge.org "become my-web-tool; webservice --backend=kubernetes python3.11 status"
+ssh user@login.toolforge.org "sudo -niu tools.my-web-tool webservice --backend=kubernetes python3.11 status"
 ```
 
 ### Daily Data Collection (Cron + Job)
@@ -639,8 +660,16 @@ ssh user@login.toolforge.org "become my-web-tool; webservice --backend=kubernete
 # 1. Deploy the script
 rsync -avz collect_data.py user@login.toolforge.org:/data/project/my-tool/
 
-# 2. Set cron to trigger a Kubernetes job
-ssh user@login.toolforge.org "become my-tool; crontab -l | { cat; echo '0 3 * * * toolforge jobs run daily-collect --command \"python3 /data/project/my-tool/collect_data.py\" --image python3.11 --wait --filelog >> /data/project/my-tool/logs/cron_trigger.log 2>&1'; } | crontab -"
+# 2. Install a cron entry that triggers a Kubernetes job.
+#    Write the entry to a file and install it as one `sh -c` sequence, rather than
+#    nesting a pipeline through ssh → sudo → sh. The nested-quoting version is the
+#    shape that breaks quietly, and the `| crontab -` must run as the tool too.
+cat > daily-collect.cron <<'CRON'
+0 3 * * * toolforge jobs run daily-collect --command "python3 /data/project/my-tool/collect_data.py" --image python3.11 --wait --filelog >> /data/project/my-tool/logs/cron_trigger.log 2>&1
+CRON
+scp daily-collect.cron user@login.toolforge.org:/data/project/my-tool/
+# Append to the tool's existing crontab (crontab(1) replaces, so re-read first)
+ssh user@login.toolforge.org "sudo -niu tools.my-tool sh -c 'crontab -l 2>/dev/null > /tmp/ct; cat /data/project/my-tool/daily-collect.cron >> /tmp/ct; crontab /tmp/ct'"
 ```
 
 ### Build Service Web App (Modern Workflow)
@@ -654,17 +683,17 @@ ssh user@login.toolforge.org "become my-tool; crontab -l | { cat; echo '0 3 * * 
 #      web: gunicorn --bind=0.0.0.0 --workers=4 app:app
 
 # 3. Build the container image from the Git repo
-ssh user@login.toolforge.org "become my-build-tool; toolforge build start https://gitlab.wikimedia.org/toolforge-repos/my-build-tool"
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge build start https://gitlab.wikimedia.org/toolforge-repos/my-build-tool"
 
 # 4. Start as a build service web service
-ssh user@login.toolforge.org "become my-build-tool; toolforge webservice buildservice start --mount=none"
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice start --mount=none"
 
 # 5. Verify it's running
-ssh user@login.toolforge.org "become my-build-tool; toolforge webservice buildservice status"
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice status"
 
 # 6. To update: push new code to Git, rebuild, restart
-#    ssh login.toolforge.org "become my-build-tool; toolforge build start <repo-url>"
-#    ssh login.toolforge.org "become my-build-tool; toolforge webservice buildservice restart"
+#    ssh login.toolforge.org "sudo -niu tools.my-build-tool toolforge build start <repo-url>"
+#    ssh login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice restart"
 ```
 
 ---
