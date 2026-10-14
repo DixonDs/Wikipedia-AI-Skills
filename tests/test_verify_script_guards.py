@@ -223,6 +223,19 @@ if __name__ == "__main__":
     main()
 '''
 
+# Mirrors setup-tunnel.sh as it was: no arity guard, and its only early exit is a
+# *missing environment variable* — so it behaves differently on a configured machine
+# than on CI, and only the configured machine reveals the violation.
+ENV_DEPENDENT_SH = '''#!/usr/bin/env bash
+set -euo pipefail
+if [ -z "${TOOLFORGE_USER:-}" ]; then
+    echo "Usage: env-dependent.sh [db_host]" >&2
+    echo "   export TOOLFORGE_USER='name'" >&2
+    exit 1
+fi
+echo "opened a tunnel as ${TOOLFORGE_USER}"
+'''
+
 DIES_ON_IMPORT = '''#!/usr/bin/env python3
 import argparse
 import this_module_does_not_exist_anywhere
@@ -390,6 +403,60 @@ class TestSandbox:
             assert "127.0.0.1:9" in env[var]
         assert "NO_PROXY" not in env and "no_proxy" not in env
 
+    def test_env_scrub_removes_caller_specific_config(self, tmp_path, monkeypatch):
+        """TOOLFORGE_*/WIKIMEDIA_*/WMF_*/SSH_* must not reach the scripts under test."""
+        monkeypatch.setenv("TOOLFORGE_USER", "someone")
+        monkeypatch.setenv("TOOLFORGE_DB_PORT", "3307")
+        monkeypatch.setenv("WIKIMEDIA_USER_AGENT", "X/1.0 (https://example.org)")
+        monkeypatch.setenv("WMCLOUD_TOKEN", "secret")
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+        env = vsg.sandbox_env(tmp_path)
+        for var in ("TOOLFORGE_USER", "TOOLFORGE_DB_PORT", "WIKIMEDIA_USER_AGENT",
+                    "WMCLOUD_TOKEN", "SSH_AUTH_SOCK"):
+            assert var not in env, f"{var} leaked into the sandbox"
+
+    def test_unrelated_env_is_preserved(self, tmp_path, monkeypatch):
+        """Scrubbing must not strip everything — PATH/HOME are needed to run scripts."""
+        monkeypatch.setenv("MY_OWN_SETTING", "keep-me")
+        env = vsg.sandbox_env(tmp_path)
+        assert env.get("MY_OWN_SETTING") == "keep-me"
+        assert "PATH" in env
+
+    def test_verdict_is_invariant_to_the_callers_environment(self, tmp_path, monkeypatch):
+        """The same script must get the same verdict on CI and on a configured box.
+
+        Before the scrub, `setup-tunnel.sh` was flagged on a machine with
+        $TOOLFORGE_USER set and passed on CI, because that variable was its only
+        early exit. This asserts the two runs now agree.
+        """
+        root = write_skill_scripts(tmp_path, {
+            "demo-skill/scripts/env_dependent.sh": ENV_DEPENDENT_SH,
+        })
+        monkeypatch.setenv("TOOLFORGE_USER", "someone")
+        configured = vsg.scan(root, Args())
+        monkeypatch.delenv("TOOLFORGE_USER", raising=False)
+        bare_ci = vsg.scan(root, Args())
+        assert [v["file"] for v in configured[0]] == [v["file"] for v in bare_ci[0]]
+        assert configured[1] == bare_ci[1] == 1
+
+    def test_env_gated_guard_is_not_detected__known_limitation(self, tmp_path, monkeypatch):
+        """Documented limit: a guard gated on a *missing* env var is not caught.
+
+        Scrubbing makes the verdict reproducible, it does not make it diagnostic: the
+        scrubbed env makes an env-gated script take its early exit, so it looks
+        guarded. `setup-tunnel.sh` therefore needed a real arity guard (see
+        test_setup_tunnel_refuses_a_bare_invocation), not just this scrub.
+        """
+        monkeypatch.setenv("TOOLFORGE_USER", "someone")
+        root = write_skill_scripts(tmp_path, {
+            "demo-skill/scripts/env_dependent.sh": ENV_DEPENDENT_SH,
+        })
+        violations, examined, _, _ = vsg.scan(root, Args())
+        assert examined == 1
+        assert violations == [], (
+            "if this now FAILS, the verifier has gained env-gated detection — "
+            "update the docs and this limitation note rather than reverting it")
+
 
 class TestExemptions:
     """EXEMPT is how bare invocation is declared intentional — with a reason."""
@@ -439,3 +506,14 @@ class TestRealTree:
         violations, examined, _, _ = vsg.scan(SKILLS_DIR, Args(files=[script], timeout=10))
         assert examined == 1
         assert violations == [], "api_client.py must require --endpoint"
+
+    def test_setup_tunnel_refuses_a_bare_invocation(self):
+        """Fixed 2026-10-05: its only early exit was $TOOLFORGE_USER being unset, so on
+        a configured machine a bare run opened a real SSH tunnel (exit 0) while CI,
+        where the variable is absent, saw exit 1 and passed."""
+        script = SKILLS_DIR / "wikimedia-database" / "scripts" / "setup-tunnel.sh"
+        violations, examined, _, _ = vsg.scan(SKILLS_DIR, Args(files=[script], timeout=10))
+        assert examined == 1
+        assert violations == [], (
+            "setup-tunnel.sh must refuse a bare invocation; a missing $TOOLFORGE_USER "
+            "is not a guard because it is set on every configured machine")

@@ -76,8 +76,12 @@ See the `wikimedia-toolforge` skill for more on tool-owned databases.
 ### Method 1: `setup-tunnel.sh` (recommended)
 
 ```bash
+./scripts/setup-tunnel.sh --yes                    # defaults: enwiki replica, port 3307
 ./scripts/setup-tunnel.sh [db_host] [local_port]
 ```
+
+`--yes` is required for the defaults: the script's default action is to background a
+long-lived SSH tunnel, so it refuses to act on a bare invocation.
 
 - Auto-detects whether tunnel is already running
 - Uses `autossh` if available (auto-reconnecting, recommended for long sessions)
@@ -145,7 +149,7 @@ mysql -h 127.0.0.1 -P 3307 -u u12345 -p -e "SELECT 1"
 - Your key isn't added to Toolforge: check admin panel
 
 ### "Connection refused" on local port
-- Tunnel isn't running: run `./scripts/setup-tunnel.sh`
+- Tunnel isn't running: run `./scripts/setup-tunnel.sh --yes`
 - Wrong port: check `TOOLFORGE_DB_PORT`
 
 ### "Access denied for user"

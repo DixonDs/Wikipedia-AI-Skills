@@ -3,6 +3,10 @@
 # Usage: ./setup-tunnel.sh [db_host] [local_port]
 #   db_host:   Replica host (default: enwiki.analytics.db.svc.wikimedia.cloud)
 #   local_port: Local port for tunnel (default: 3307)
+#
+#   ./setup-tunnel.sh --yes          open the tunnel with the defaults
+#   ./setup-tunnel.sh enwiki.analytics.db.svc.wikimedia.cloud 3308
+#   ./setup-tunnel.sh --help
 
 set -euo pipefail
 
@@ -11,6 +15,36 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
+
+# This script's default action is to open a long-lived SSH tunnel in the
+# background, so that must be requested explicitly. Relying on $TOOLFORGE_USER
+# being unset was not a guard: on a configured machine the check below passed and
+# the script silently opened a tunnel, while CI (variable unset) saw it exit early.
+usage() {
+    awk '/^# / { sub(/^# /, ""); print } /^$/ { exit }' "$0"
+    cat <<'EOF'
+
+  --yes            use the defaults above and open the tunnel
+  --help, -h       show this message and exit
+EOF
+}
+
+case "${1:-}" in
+    --help|-h)
+        usage
+        exit 0
+        ;;
+    "")
+        usage >&2
+        echo "" >&2
+        echo "error: refusing to open an SSH tunnel with no arguments" >&2
+        echo "       pass --yes for the defaults, or a db_host/local_port" >&2
+        exit 2
+        ;;
+    --yes)
+        shift
+        ;;
+esac
 
 DB_HOST="${1:-enwiki.analytics.db.svc.wikimedia.cloud}"
 LOCAL_PORT="${2:-${TOOLFORGE_DB_PORT:-3307}}"
