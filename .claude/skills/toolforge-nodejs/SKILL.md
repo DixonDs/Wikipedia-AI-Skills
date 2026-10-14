@@ -13,10 +13,16 @@ skill_discovery_hints:
   - keywords: ["Toolforge logs", "kubectl logs", "webservice logs", "debug", "tail logs", "toolforge debug"]
   - keywords: ["Node streaming", "buffer", "readFile", "createReadStream", "Pannellum", "XHR", "WebGL"]
   - keywords: ["Toolforge cron", "node job", "scheduled task", "cron node", "batch job"]
-last_verified: 2026-10-03
+last_verified: 2026-10-14
 ---
 
 > ⚠️ **Prerequisites:** This skill assumes you have a Toolforge account and can SSH in. See **[wikimedia-toolforge](../wikimedia-toolforge/SKILL.md)** for account setup, tool creation, and basic SSH configuration.
+
+> ⚠️ **Over SSH, chain with `sudo -niu tools.<tool> <cmd>`.** `ssh host "become <tool>; <cmd>"`
+> runs `<cmd>` as **you**, not the tool — `become` uses `exec`, so it replaces the shell
+> before the `;` is reached. Passing the command as an argument
+> (`become <tool> <cmd>`) is fine: the semicolon is the bug, not `become`. See
+> **[wikimedia-toolforge](../wikimedia-toolforge/SKILL.md)** §Guardrails & Common Pitfalls.
 
 > 💡 **Zero dependencies by default:** Toolforge's NFS filesystem has slow metadata operations — `npm install` can take minutes. The patterns in this skill use **only Node.js built-in modules** by default, which means zero `npm install`, zero `package.json`, and instant deployment. Add dependencies only when you must.
 

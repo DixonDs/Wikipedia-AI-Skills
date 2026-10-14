@@ -12,10 +12,16 @@ skill_discovery_hints:
   - keywords: ["Toolforge PORT", "gunicorn bind", "Toolforge static", "Python http server"]
   - keywords: ["Toolforge flask", "flask app", "Toolforge deploy python", "toolforge python"]
   - keywords: ["Toolforge cron python", "python job", "scheduled python", "Toolforge batch"]
-last_verified: 2026-10-03
+last_verified: 2026-10-14
 ---
 
 > ⚠️ **Prerequisites:** This skill assumes you have a Toolforge account and can SSH in. See **[wikimedia-toolforge](../wikimedia-toolforge/SKILL.md)** for account setup, tool creation, and basic SSH configuration.
+
+> ⚠️ **Over SSH, chain with `sudo -niu tools.<tool> <cmd>`.** `ssh host "become <tool>; <cmd>"`
+> runs `<cmd>` as **you**, not the tool — `become` uses `exec`, so it replaces the shell
+> before the `;` is reached. Passing the command as an argument
+> (`become <tool> <cmd>`) is fine: the semicolon is the bug, not `become`. See
+> **[wikimedia-toolforge](../wikimedia-toolforge/SKILL.md)** §Guardrails & Common Pitfalls.
 
 > 💡 **Python is the dominant language on Toolforge.** Most existing tools use Python, and the platform has first-class support for Python runtimes. This skill covers the standard Flask + gunicorn stack and FastAPI + uvicorn, which power the vast majority of Toolforge Python web services.
 
