@@ -29,7 +29,10 @@ Sandboxing (the scripts under test are not trusted)
     process-group timeout it cannot outlive;
   * caller-specific config is scrubbed (`TOOLFORGE_*`, `WIKIMEDIA_*`, `WMCLOUD_*`,
     `WMF_*`, `SSH_*`) so the verdict cannot differ between CI and a configured
-    developer machine. See ENV_SCRUB_RE for the case that motivated it.
+    developer machine. See ENV_SCRUB_RE for the case that motivated it;
+  * gitignored files are not copied or run, so a local ignored scratch directory
+    cannot add scripts that CI never sees. Falls back to copying everything when
+    git cannot be consulted (a bare skills tree).
 
 Pass criterion, per script invoked with no arguments:
   * exits within --timeout, and
@@ -139,10 +142,43 @@ def is_candidate(path: Path, text: str) -> bool:
     return bool(PY_ENTRY_RE.search(text) and IMPORTS_ARGPARSE_RE.search(text))
 
 
+def gitignored_paths(paths: list[Path]) -> set[Path]:
+    """Return the subset of paths that git ignores.
+
+    This checks the *shipped* scripts, so an ignored local scratch directory must not
+    be run: a developer's `assessment-workspace/` eval output could otherwise add
+    scripts to the run that CI never sees. Falls back to "nothing is ignored" when git
+    cannot be consulted, so the verifier still works on a bare skills tree.
+
+    (Duplicated in scripts/verify-links.py: the verifiers are standalone by design.)
+    """
+    if not paths:
+        return set()
+    try:
+        # Anchor git at the paths themselves: repo discovery must not depend on the
+        # caller's cwd (see the note in scripts/verify-links.py).
+        root = Path(os.path.commonpath([str(p.parent) for p in paths]))
+        proc = subprocess.run(
+            ["git", "check-ignore", "-z", "--stdin"],
+            cwd=root,
+            input="\0".join(str(p) for p in paths) + "\0",
+            capture_output=True, text=True)
+    except (OSError, ValueError):
+        return set()
+    if proc.returncode not in (0, 1):      # 1 = nothing ignored; 128 = not a repo
+        return set()
+    return {Path(p).resolve() for p in proc.stdout.split("\0") if p}
+
+
 def build_sandbox(skills_dir: Path) -> tuple[Path, Path]:
     """Copy the skills tree and an injection dir; return (workdir, harness_dir)."""
     work = Path(tempfile.mkdtemp(prefix="verify-script-guards-"))
-    shutil.copytree(skills_dir, work / "skills")
+    ignored = gitignored_paths([p for p in skills_dir.rglob("*")])
+
+    def _skip_gitignored(src_dir: str, names: list[str]) -> set[str]:
+        return {n for n in names if (Path(src_dir) / n).resolve() in ignored}
+
+    shutil.copytree(skills_dir, work / "skills", ignore=_skip_gitignored)
     harness = work / "harness"
     harness.mkdir()
     (harness / "sitecustomize.py").write_text(BLOCKER_SITECUSTOMIZE)
