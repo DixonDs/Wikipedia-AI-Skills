@@ -21,6 +21,11 @@ refresh-url-registry.py) and the scheduled url-registry-refresh workflow. If
 the registry or any live-checked URL is older than --max-registry-age-days
 (default 90), verification fails so staleness cannot accumulate silently.
 
+Gitignored files are skipped: only shipped content is scanned, so a developer's
+ignored scratch output (e.g. `assessment-workspace/` eval artifacts) cannot make
+this red on a machine where CI is green. When git cannot be consulted the check
+falls back to scanning everything, so a bare skills tree still works.
+
 Usage:
     python3 scripts/verify-links.py
     python3 scripts/verify-links.py --no-url-registry   # structural checks only
@@ -30,7 +35,9 @@ Exit codes: 0 = clean, 1 = violations found.
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -208,6 +215,35 @@ def load_registry(path: Path) -> dict | None:
     return json.loads(path.read_text())
 
 
+def gitignored_paths(paths: list[Path]) -> set[Path]:
+    """Return the subset of paths that git ignores.
+
+    Scanned content is the *shipped* content, so a developer's ignored scratch output
+    must not decide the verdict. Before this, a local `assessment-workspace/` (an
+    ignored skill-creator/eval artifact) made this verifier fail with two 404s on a
+    machine where CI was green — the same check, two answers.
+
+    Falls back to "nothing is ignored" when git cannot be consulted (not a repo,
+    git absent), so the verifier still works on a bare checkout of the skills tree.
+    """
+    if not paths:
+        return set()
+    try:
+        # Anchor git at the paths themselves: repo discovery must not depend on the
+        # caller's cwd (running from outside the repo would otherwise misreport).
+        root = Path(os.path.commonpath([str(p.parent) for p in paths]))
+        proc = subprocess.run(
+            ["git", "check-ignore", "-z", "--stdin"],
+            cwd=root,
+            input="\0".join(str(p) for p in paths) + "\0",
+            capture_output=True, text=True)
+    except (OSError, ValueError):
+        return set()
+    if proc.returncode not in (0, 1):      # 1 = nothing ignored; 128 = not a repo
+        return set()
+    return {Path(p).resolve() for p in proc.stdout.split("\0") if p}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--skills-dir", type=Path, default=DEFAULT_SKILLS_DIR)
@@ -225,13 +261,17 @@ def main(argv: list[str] | None = None) -> int:
     # Scan every skill Markdown file, not just SKILL.md and references/*.md.
     # Asset templates and example outputs can carry URLs too, so they need the
     # same structural and registry checks.
-    files = sorted(args.skills_dir.rglob("*.md"))
+    candidates = sorted(args.skills_dir.rglob("*.md"))
+    ignored = gitignored_paths(candidates)
+    files = [f for f in candidates if f.resolve() not in ignored]
     for f in files:
         all_problems.extend(scan_file(f, args.skills_dir, url_registry))
 
     for p in all_problems:
         print(f"  x {p}")
-    print(f"\n{len(files)} files scanned, {len(all_problems)} link violation(s).")
+    skipped = len(candidates) - len(files)
+    note = f" ({skipped} gitignored, skipped)" if skipped else ""
+    print(f"\n{len(files)} files scanned{note}, {len(all_problems)} link violation(s).")
 
     return 1 if all_problems else 0
 

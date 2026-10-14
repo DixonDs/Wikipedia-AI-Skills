@@ -16,6 +16,7 @@ CI (`python3 scripts/verify-script-guards.py`), not to the unit suite.
 
 import importlib.util
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -297,6 +298,52 @@ def write_skill_scripts(tmp_path: Path, scripts: dict[str, str]) -> Path:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(body)
     return root
+
+
+def init_repo(path: Path) -> None:
+    """Make `path` a git repo, or skip when git is unavailable."""
+    try:
+        subprocess.run(["git", "init", "-q"], cwd=path, check=True, capture_output=True)
+    except (OSError, subprocess.CalledProcessError):  # pragma: no cover
+        pytest.skip("git is unavailable")
+
+
+class TestGitignoredArtifacts:
+    """Ignores must not decide the verdict: CI never sees a developer's scratch dir."""
+
+    def test_gitignored_scripts_are_not_run(self, tmp_path):
+        root = write_skill_scripts(tmp_path, {
+            "demo-skill/scripts/real.sh": SILENT_SH,          # a genuine violation
+            "demo-skill/scratch/ignored.sh": SILENT_SH,       # ignored -> must not run
+        })
+        init_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text("scratch/\n")
+
+        violations, examined, _, _ = vsg.scan(root, Args())
+        assert examined == 1, "the gitignored script was still examined"
+        assert [v["file"] for v in violations] == ["demo-skill/scripts/real.sh"]
+
+    def test_no_repo_still_scans_everything(self, tmp_path):
+        """A bare checkout of the skills tree must stay scannable, not silently empty."""
+        root = write_skill_scripts(tmp_path, {
+            "demo-skill/scripts/real.sh": SILENT_SH,
+        })
+        violations, examined, _, _ = vsg.scan(root, Args())
+        assert examined == 1
+        assert [v["file"] for v in violations] == ["demo-skill/scripts/real.sh"]
+
+    def test_gitignored_paths_helper(self, tmp_path):
+        init_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text("scratch/\n")
+        kept = tmp_path / "keep.md"
+        kept.write_text("x")
+        ignored = tmp_path / "scratch" / "out.md"
+        ignored.parent.mkdir()
+        ignored.write_text("x")
+        got = vsg.gitignored_paths([kept, ignored])
+        assert ignored.resolve() in got
+        assert kept.resolve() not in got
+        assert vsg.gitignored_paths([]) == set()
 
 
 class TestScanCriterion:

@@ -41,6 +41,14 @@ def make_skill(tmp_path: Path, content: str) -> Path:
     return d
 
 
+def init_repo(path: Path) -> None:
+    """Make `path` a git repo, or skip when git is unavailable."""
+    try:
+        subprocess.run(["git", "init", "-q"], cwd=path, check=True, capture_output=True)
+    except (OSError, subprocess.CalledProcessError):  # pragma: no cover
+        pytest.skip("git is unavailable")
+
+
 # ---------------------------------------------------------------------------
 # verify-freshness
 # ---------------------------------------------------------------------------
@@ -419,3 +427,64 @@ def test_api_surface_rejects_known_hallucinations():
     assert "revisions" in SURFACE["query"]["prop"]
     assert "siteinfo" in SURFACE["query"]["meta"]
     assert "wikitext" in SURFACE["action_props"]["parse"]
+
+
+# ---------------------------------------------------------------------------
+# gitignored local artifacts must not decide the verdict
+#
+# Kept at the end of the file on purpose: these were originally inserted mid-file
+# and rebased badly into a neighbouring function's body.
+# ---------------------------------------------------------------------------
+
+def test_gitignored_paths_flags_ignored_files(tmp_path):
+    init_repo(tmp_path)
+    (tmp_path / ".gitignore").write_text("scratch/\n")
+    kept = tmp_path / "keep.md"
+    kept.write_text("x")
+    ignored = tmp_path / "scratch" / "out.md"
+    ignored.parent.mkdir()
+    ignored.write_text("x")
+    got = links.gitignored_paths([kept, ignored])
+    assert ignored.resolve() in got
+    assert kept.resolve() not in got
+
+
+def test_gitignored_paths_falls_back_outside_a_repo(tmp_path):
+    """A bare skills tree with no repo must still be scannable, not silently empty."""
+    f = tmp_path / "a.md"
+    f.write_text("x")
+    assert links.gitignored_paths([f]) == set()
+
+
+def test_gitignored_paths_handles_empty_input(tmp_path):
+    assert links.gitignored_paths([]) == set()
+
+
+def test_main_skips_gitignored_markdown(tmp_path, capsys):
+    """The real bug: an ignored eval artifact made local red where CI was green."""
+    init_repo(tmp_path)
+    (tmp_path / ".gitignore").write_text("assessment-workspace/\n")
+
+    url = "https://tools-static.test-registry.org/gone"
+    registry = tmp_path / "url-registry.json"
+    registry.write_text(json.dumps({
+        "generated_at": "2026-10-14T00:00:00Z",
+        "urls": {url: 404},
+        "checked_at": {url: "2026-10-14T00:00:00Z"},
+    }))
+
+    skills = tmp_path / "skills"
+    tracked = skills / "keep" / "SKILL.md"
+    tracked.parent.mkdir(parents=True)
+    tracked.write_text(f"See {url}\n")
+    ignored = skills / "scratch" / "assessment-workspace" / "report.md"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text(f"See {url}\n")
+
+    rc = links.main(["--skills-dir", str(skills), "--url-registry", str(registry)])
+    out = capsys.readouterr().out
+
+    # The tracked file still fails; the ignored one is not scanned at all.
+    assert rc == 1
+    assert "keep/SKILL.md" in out
+    assert "assessment-workspace" not in out
