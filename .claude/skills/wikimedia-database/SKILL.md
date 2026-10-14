@@ -7,7 +7,7 @@ depends_on: [wikimedia-toolforge]
 skill_discovery_hints:
   - keywords: ["SQL", "database", "replica", "Toolforge database", "enwiki_p", "MySQL"]
   - keywords: ["SSH tunnel", "pymysql", "query Wikipedia", "schema", "page table", "revision table"]
-last_verified: 2026-10-03
+last_verified: 2026-10-14
 ---
 
 > ⚠️ **User-Agent required:** While this skill primarily uses SQL via SSH tunnel, any direct API calls (e.g., for verification via `curl` or `requests`) must include a descriptive `User-Agent` header. See the **[wikimedia-api-access](../wikimedia-api-access/SKILL.md)** skill for the correct format.
@@ -152,8 +152,12 @@ Establishes an SSH tunnel to Toolforge. Auto-detects if tunnel is already
 active, prefers `autossh` for auto-reconnecting, and verifies the connection.
 
 ```bash
+./scripts/setup-tunnel.sh --yes                    # defaults
 ./scripts/setup-tunnel.sh [db_host] [local_port]
 ```
+
+**Refuses to run with no arguments:** its default action is to background a
+long-lived SSH tunnel, so that has to be requested. Use `--yes` for the defaults.
 
 **Requires:** `TOOLFORGE_USER` environment variable and SSH key loaded in agent.
 

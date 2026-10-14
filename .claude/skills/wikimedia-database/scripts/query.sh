@@ -44,7 +44,7 @@ fi
 # Check tunnel
 if ! command -v nc &>/dev/null || ! nc -z 127.0.0.1 "$LOCAL_PORT" 2>/dev/null; then
     echo -e "${YELLOW}⚠️  No tunnel detected on 127.0.0.1:${LOCAL_PORT}${NC}"
-    echo "   Run ./scripts/setup-tunnel.sh first"
+    echo "   Run ./scripts/setup-tunnel.sh --yes first"
     exit 1
 fi
 

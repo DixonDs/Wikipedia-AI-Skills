@@ -26,7 +26,10 @@ Sandboxing (the scripts under test are not trusted)
     `sitecustomize`, and proxy env vars point at the unroutable port 9, so a
     `curl` inside a shell script fails fast instead of reaching the network;
   * stdin is /dev/null, stdout/stderr are captured, and each script gets a
-    process-group timeout it cannot outlive.
+    process-group timeout it cannot outlive;
+  * caller-specific config is scrubbed (`TOOLFORGE_*`, `WIKIMEDIA_*`, `WMCLOUD_*`,
+    `WMF_*`, `SSH_*`) so the verdict cannot differ between CI and a configured
+    developer machine. See ENV_SCRUB_RE for the case that motivated it.
 
 Pass criterion, per script invoked with no arguments:
   * exits within --timeout, and
@@ -99,6 +102,13 @@ socket.create_connection = _blocked
 PY_ENTRY_RE = re.compile(r"if\s+__name__\s*==\s*['\"]__main__['\"]")
 IMPORTS_ARGPARSE_RE = re.compile(r"^\s*(?:import\s+argparse|from\s+argparse\s+import)", re.M)
 
+# Caller-specific config that changes what a script does when invoked bare, so it
+# must not reach the scripts under test. `setup-tunnel.sh` is the motivating case:
+# it reads $TOOLFORGE_USER, so on a configured Toolforge machine it skipped its own
+# early exit and opened an SSH tunnel (exit 0, flagged as a violation), while CI —
+# where the variable is unset — saw it exit 1 and passed. Same script, two verdicts.
+ENV_SCRUB_RE = re.compile(r"^(?:TOOLFORGE_|WIKIMEDIA_|WMCLOUD_|WMF_|SSH_)", re.I)
+
 # Scripts whose bare invocation IS the intended use, so printing usage instead
 # would break them. Each needs a reason: an exemption is a decision, not a silencer.
 EXEMPT: dict[str, str] = {
@@ -141,6 +151,10 @@ def build_sandbox(skills_dir: Path) -> tuple[Path, Path]:
 
 def sandbox_env(harness: Path) -> dict:
     env = dict(os.environ)
+    # Scrub caller-specific Toolforge/Wikimedia/SSH config so the verdict is the same
+    # on CI as on a configured developer machine (see ENV_SCRUB_RE).
+    for var in [k for k in env if ENV_SCRUB_RE.match(k)]:
+        env.pop(var, None)
     env["PYTHONPATH"] = str(harness)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     for var in ("http_proxy", "https_proxy", "all_proxy",
