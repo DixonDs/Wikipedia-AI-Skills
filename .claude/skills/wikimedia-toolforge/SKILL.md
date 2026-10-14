@@ -440,6 +440,11 @@ toolforge webservice buildservice start --mount=none
 # Give memory-hungry apps headroom (default limit is 512 Mi — see gotchas below)
 toolforge webservice buildservice start --mount=none -m 1Gi
 
+# Deploy a specific build: pin the digest that `toolforge build start` printed.
+# Note namespace/name — NOT the full tools-harbor.wmcloud.org/... path (see gotchas)
+toolforge webservice buildservice start \
+  --buildservice-image my-tool/my-tool@sha256:<digest> --mount=none -m 1Gi
+
 # Alternatively, create a service.template so 'webservice start' works directly:
 echo -e 'type: buildservice\nmount: none' > service.template
 
@@ -449,7 +454,7 @@ toolforge webservice buildservice status
 # View logs
 toolforge webservice buildservice logs -f
 
-# Restart after a new build
+# Restart the running service. This does NOT change the image — see §8.8.
 toolforge webservice buildservice restart
 
 # Stop
@@ -478,10 +483,32 @@ toolforge webservice buildservice shell
   (verified), or Gerrit: `toolforge build start https://github.com/<user>/<repo>`.
 - gunicorn 26 logs a harmless `Control server error: [Errno 13] Permission
   denied` at container startup — non-fatal, ignore.
+- **`--buildservice-image` wants `namespace/name:tag`, not the registry path.**
+  `toolforge build start` prints the full `tools-harbor.wmcloud.org/…` URL, which this
+  flag **rejects**. The validator (`toolsws/cli/webservice.py`) accepts exactly two
+  `/`-separated parts with no `.` in the first — that is what rejects a registry host —
+  and requires a tag or digest in the second. So `my-tool/my-tool@sha256:<digest>` or
+  `my-tool/my-tool:latest`, with the host stripped.
+- **`start` is a no-op while the service is already running.** It prints `Your job is
+  already running` and **exits 1**, leaving the old image serving. So a "successful"
+  looking deploy can actually be no deploy at all — check the exit status.
+- **`restart` never applies an image.** The CLI's `restart` action calls
+  `job.request_restart()` and ignores `--buildservice-image` entirely, so it can only
+  re-run whatever image the deployment already references. Fine for an unpinned
+  `:latest` build (subject to the node's image cache); a digest-pinned deploy must be
+  replaced with `stop` + `start --buildservice-image <new-digest>`. `stop` is
+  idempotent — on a stopped service it prints "not running" and succeeds — so the
+  stop/start pair is safe to run unconditionally.
 
 **Note on NFS mounts:** By default, `--mount=none` is recommended. If your tool needs
 to read/write files in `/data/project/`, use `--mount=all` and reference the path via
 the `$TOOL_DATA_DIR` environment variable instead of relying on `$HOME`.
+
+With `--mount=none` there is **no persistent storage**: the container starts with an
+empty cache and anything written inside its filesystem is lost on restart. That is the
+right default for stateless tools and is why a redeploy can be slower the first time.
+Because a restart also drops in-memory state, never restart a service that may be
+mid-job.
 
 ### 8.6 Running a Job
 
@@ -518,10 +545,25 @@ To deploy a new version:
 become my-tool-name
 
 # 1. Push new code to your Git repo
-# 2. Trigger a new build
+# 2. Trigger a new build — the output prints the new digest; copy it
 toolforge build start https://gitlab.wikimedia.org/toolforge-repos/my-tool
-# 3. Restart the web service to use the new image
-toolforge webservice buildservice restart
+
+# 3. Stop first. `start` refuses while a service is already running
+#    ("Your job is already running", exit 1), and `restart` cannot swap the image.
+toolforge webservice buildservice stop
+
+# 4. Start, pinned to the digest from step 2
+toolforge webservice buildservice start \
+  --buildservice-image my-tool/my-tool@sha256:<digest> --mount=none -m 1Gi
+```
+
+**Verify the new image is actually live.** `status` only reports that *something* is
+running, and `uptime` resets on restart, so neither tells you which build you have.
+Expose a version string and read it back:
+
+```bash
+curl -s https://my-tool.toolforge.org/api/about \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['app_version'])"
 ```
 
 ### 8.9 Installing Apt Packages
@@ -609,7 +651,7 @@ https://packages.ubuntu.com/noble/.
 
 9. **Clean up old jobs** — Kubernetes job history accumulates. Delete completed jobs that are no longer needed using `toolforge jobs delete`.
 
-10. **Build Service: Git repo required** — The Build Service requires a **public** Git repository. Private repos are not supported. The `Procfile` must be at the repository root and named exactly `Procfile` (no extension). After a build, you must restart the web service to pick up the new image — `toolforge build start` alone does not restart running services.
+10. **Build Service: Git repo required** — The Build Service requires a **public** Git repository. Private repos are not supported. The `Procfile` must be at the repository root and named exactly `Procfile` (no extension). A build does not deploy anything by itself: `toolforge build start` only produces an image, so you must `stop` the running service and `start` it against the new digest (§8.8). `restart` alone keeps serving the old image.
 
 11. **Build Service: NFS and $HOME** — Build Service containers do not have NFS mounted by default. Use `--mount=all` to mount it. Inside the container, `$HOME` does not point to `/data/project/<tool>/` — use the `$TOOL_DATA_DIR` environment variable instead for tool home directory paths.
 
@@ -682,18 +724,24 @@ ssh user@login.toolforge.org "sudo -niu tools.my-tool sh -c 'crontab -l 2>/dev/n
 #    Ensure a Procfile exists at the root:
 #      web: gunicorn --bind=0.0.0.0 --workers=4 app:app
 
-# 3. Build the container image from the Git repo
+# 3. Build the container image from the Git repo.
+#    The output PRINTS the new digest — copy it for step 5.
 ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge build start https://gitlab.wikimedia.org/toolforge-repos/my-build-tool"
 
-# 4. Start as a build service web service
-ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice start --mount=none"
+# 4. Stop any running version. NOT optional: `start` is a no-op while a service is
+#    already running, so without this you keep serving the OLD image.
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice stop"
 
-# 5. Verify it's running
+# 5. Start, pinned to the digest from step 3. Note namespace/name — NOT the full
+#    tools-harbor.wmcloud.org/... path that step 3 printed.
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice start --buildservice-image my-build-tool/my-build-tool@sha256:<digest> --mount=none -m 512Mi"
+
+# 6. Verify it is RUNNING and is the NEW IMAGE — a version endpoint, not uptime
+curl -s https://my-build-tool.toolforge.org/api/about
 ssh user@login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice status"
+ssh user@login.toolforge.org "sudo -niu tools.my-build-tool kubectl logs deployment/my-build-tool --tail=20"
 
-# 6. To update: push new code to Git, rebuild, restart
-#    ssh login.toolforge.org "sudo -niu tools.my-build-tool toolforge build start <repo-url>"
-#    ssh login.toolforge.org "sudo -niu tools.my-build-tool toolforge webservice buildservice restart"
+# 7. To update: repeat 3-6 (build, stop, start with the new digest, verify)
 ```
 
 ---
