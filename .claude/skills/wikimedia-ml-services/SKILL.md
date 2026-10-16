@@ -14,7 +14,7 @@ skill_discovery_hints:
   - keywords: ["translation", "content translation", "cross-language", "recommendation"]
   - keywords: ["LLM", "chat completions", "Qwen", "OpenAI-compatible", "text generation", "LiftWing Studio", "large language model"]
   - keywords: ["429", "rate limited", "rate limit", "Toolforge", "high-throughput", "burst", "LLM testing"]
-last_verified: 2026-10-07
+last_verified: 2026-10-16
 ---
 
 > ⚠️ **User-Agent required:** All API calls below need a descriptive `User-Agent` header. See the **[wikimedia-api-access](../wikimedia-api-access/SKILL.md)** skill for the correct format and rate-limiting patterns.
@@ -80,6 +80,14 @@ LiftWing also hosts **open-weight LLM chat models** — a different service from
 the scoring models above (OpenAI-compatible chat API, not `:predict` POSTs).
 Quickstart: the [Wikimania 2026 page](https://wikitech.wikimedia.org/wiki/Machine_Learning/LiftWing/Large_Language_Models/Wikimania_2026);
 full platform reference: the [main LLM docs](https://wikitech.wikimedia.org/wiki/Machine_Learning/LiftWing/Large_Language_Models).
+⚠️ The Wikimania page is a **frozen hackathon quickstart** (last edited 2026-08-12): its capability
+table still lists "Tool / function calling" as unavailable and it knows only two models. Trust the
+main docs (and the notes below) for anything current.
+
+Lift Wing hosts **three kinds of model**, and they do not share a calling convention: the
+**scoring models** (`:predict`, see the reference tables above), the **chat models** (OpenAI route,
+below), and **task-specific decision models** — `llm-clef-flash`, `:predict`-only, no OpenAI route
+and not in Studio ([`references/clef-flash-decision-models.md`](references/clef-flash-decision-models.md)).
 
 | Model | Card | Context | Notes |
 |---|---|---|---|
@@ -87,7 +95,7 @@ full platform reference: the [main LLM docs](https://wikitech.wikimedia.org/wiki
 | `llm-qwen36-27b` | [Qwen3.6-27B-FP8](https://huggingface.co/Qwen/Qwen3.6-27B-FP8) | 32K tokens | 27B chat model; previously largest public model; still works |
 | `llm-qwen38-27b` | [Qwen3.8-27B-FP8](https://huggingface.co/Qwen/Qwen3.8-27B-FP8) | 32K tokens | Newer 27B public model; Wikitech says "same as qwen3.6" |
 
-The public Wikitech table also lists `llm-gpt-oss-safeguard-20b` (OpenAI gpt-oss-safeguard, ~20B MoE, 16K context, 2 GPUs TP) as a public safeguard/policy-violation model. **Caveat verified 2026-10-07:** the public chat-completions route for `llm-gpt-oss-safeguard-20b` returned HTTP 404 while `llm-qwen36-27b` and `llm-qwen38-27b` returned HTTP 200, so do not depend on the safeguard model until the public API route works.
+The public Wikitech table also lists `llm-gpt-oss-safeguard-20b` (OpenAI gpt-oss-safeguard, ~20B MoE, 16K context, 2 GPUs TP) as a public safeguard/policy-violation classifier. **Its OpenAI chat route does not work** — HTTP 404 on 2026-10-07 and re-confirmed 2026-10-16 — but it is reachable on the KServe route: `POST …/llm-gpt-oss-safeguard-20b:predict` with `{"messages": [{"role": "user", "content": "…"}]}` returns HTTP 200 in 1.4–2.2 s with `{"reasoning": …, "verdict": …}` (verified 2026-10-16). Use `:predict`, not an OpenAI client, and treat it as a classifier rather than a chat model.
 
 The Qwen models are multilingual and instruction-tuned; responses stream token-by-token.
 
@@ -210,9 +218,14 @@ logging, retention, or training.
 Works today: chat & text completions (OpenAI-compatible), streaming,
 multilingual input, context up to 32K tokens, and tool/function calling for
 public general-purpose models. Wikitech documents hosted tools including
-`current_date` and `wikipedia_semantic_search`; clients still need to run the
-tool-calling loop. **Not available yet:** web search / browsing, server-side
-RAG, vision / multimodal.
+`current_date` and `wikipedia_semantic_search`, plus a shared **tool-server**
+(REST + MCP, T436892) — but that server is **internal-only**
+(`tool-server.discovery.wmnet:31443`), so from outside the production network
+you supply your own tools and run the loop yourself. `tool_choice` accepts only
+`"auto"` or `"none"`: `"required"` and named functions return HTTP 400, so you
+cannot force a tool call. **Not available yet:** web search / browsing, server-side
+RAG, vision / multimodal (the task-specific decision model accepts images, but the
+chat models are text-only).
 DIY RAG works — fetch the context yourself and include it in the prompt.
 Models have fixed training cutoffs: retrieve current facts rather than
 trusting model memory, and verify before any on-wiki use (outputs are
@@ -235,7 +248,8 @@ assistive drafts; bot/editing policies still apply).
   script in Russian. 27b also completed all calls while 14b threw 504
   timeouts. **For translation (and most text tasks) prefer a 27B Qwen model; `llm-qwen36-27b` is benchmark-backed here, and `llm-qwen38-27b` is the newer public 27B model but has not yet been re-benchmarked in this skill.**
 - Local notes with model list, rate-limit tiers, and benchmark details:
-  `references/lift-wing-llm.md`.
+  `references/lift-wing-llm.md`; decision models (`:predict`-only typed questions,
+  caps, timings): `references/clef-flash-decision-models.md`.
 
 ---
 

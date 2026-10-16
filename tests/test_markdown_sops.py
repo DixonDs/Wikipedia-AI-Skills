@@ -220,6 +220,74 @@ class TestLiftWingLLMSection:
         assert "must match the URL path" in text  # model name == URL segment
         assert "think" in text  # reasoning wrapper
 
+    def test_wikimania_quickstart_page_flagged_as_stale(self):
+        """The Wikimania 2026 quickstart is linked but must be marked out of date."""
+        text = " ".join(self._text().split())
+        assert "frozen hackathon quickstart" in text
+        assert "Tool / function calling" in text  # names the stale claim
+
+    def test_tool_choice_limitation(self):
+        """tool_choice accepts only auto/none — named and required 400."""
+        text = self._text()
+        assert "tool_choice" in text
+        assert '"auto"' in text and '"none"' in text
+
+    def test_tool_server_internal_only(self):
+        """The shared tool-server must be described as unreachable publicly."""
+        text = " ".join(self._text().split())
+        assert "tool-server.discovery.wmnet:31443" in text
+        assert "internal-only" in text
+
+    def test_decision_model_pointer(self):
+        """The task-specific decision model is named and points at its reference."""
+        text = self._text()
+        assert "llm-clef-flash" in text
+        assert "references/clef-flash-decision-models.md" in text
+
+
+class TestLiftWingDecisionModels:
+    """Verify references/clef-flash-decision-models.md and the route-split notes."""
+
+    def _reference(self, name):
+        from conftest import SKILLS_DIR
+        path = SKILLS_DIR / "wikimedia-ml-services" / "references" / name
+        assert path.exists(), f"references/{name} must exist"
+        return " ".join(path.read_text("utf-8").split())
+
+    def test_contract_and_types(self):
+        text = self._reference("clef-flash-decision-models.md")
+        assert "llm-clef-flash:predict" in text
+        assert "output_tokens" in text
+        for qtype in ("noul", "choice", "score"):
+            assert qtype in text
+
+    def test_server_caps_documented(self):
+        """The caps read off live 400 bodies must be recorded."""
+        text = self._reference("clef-flash-decision-models.md")
+        assert "exceeds the maximum of 32" in text
+        assert "exceeds the maximum of 4" in text
+        assert "Only base64 data is allowed" in text
+
+    def test_not_chat_usable(self):
+        """The 404 trap must be explicit — this is the whole point of the file."""
+        text = self._reference("clef-flash-decision-models.md")
+        assert "Point an OpenAI client at `llm-clef-flash`" in text
+        assert "404" in text
+        assert "not OpenAI-compatible" in text.replace("*", "")
+
+    def test_schema_dependence_warning(self):
+        """Probabilities only compare within an identical question set."""
+        text = self._reference("clef-flash-decision-models.md")
+        assert "identical schema" in text.lower() or "identical question" in text.lower()
+
+    def test_route_split_in_llm_reference(self):
+        """lift-wing-llm.md must carry the per-model route/payload table."""
+        text = self._reference("lift-wing-llm.md")
+        assert "Which route does this model use" in text
+        assert "Expected a 'prompt' field (string)" in text
+        assert "llm-gpt-oss-safeguard-20b" in text
+        assert "inference.svc.eqiad.wmnet" in text
+
 
 class TestPhabricatorResponsibleInteraction:
     """Verify the responsible-interaction policy gate in wikimedia-phabricator."""

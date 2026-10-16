@@ -48,6 +48,7 @@
   "https://api.wikimedia.org/service/lw/inference/v1/models/enwiki-goodfaith:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/langid:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-<model": "2026-10-14T14:26:53Z",
+  "https://api.wikimedia.org/service/lw/inference/v1/models/llm-clef-flash:predict": "2026-10-16T12:59:04Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1": "2026-08-16T03:45:22Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1/chat/completions": "2026-10-13T14:43:26Z",
   "https://api.wikimedia.org/service/lw/inference/v1/models/outlink-topic-model:predict": "2026-08-10T12:57:50Z",
@@ -59,6 +60,7 @@
   "https://api.wikimedia.org/service/lw/inference/v1/models/revertrisk-wikidata:predict": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/service/lw/recommendation/api/v1/translation": "2026-09-29T22:22:24Z",
   "https://api.wikimedia.org/service/lw/recommendation/api/v1/translation?source=en&target=fr&count=3&seed=Apple": "2026-08-10T12:57:50Z",
+  "https://api.wikimedia.org/service/lw/specs/openapi.yaml": "2026-10-16T12:59:05Z",
   "https://api.wikimedia.org/wiki/Authentication": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/wiki/Lift_Wing_API": "2026-08-10T12:57:50Z",
   "https://api.wikimedia.org/wiki/Lift_Wing_API/Reference": "2026-08-10T12:57:50Z",
@@ -400,9 +402,11 @@
   "https://gitlab.wikimedia.org/toolforge-repos/my-tool/-/raw/main/config.yaml": "2026-10-14T14:26:54Z",
   "https://glamtools.toolforge.org/baglama2/": "2026-08-14T14:42:06Z",
   "https://glamtools.toolforge.org/glamorgan.html": "2026-08-14T14:42:07Z",
+  "https://grafana.wikimedia.org/d/dpzzsnh/ml-infra": "2026-10-16T12:59:06Z",
   "https://hay.toolforge.org/depictor/": "2026-08-10T12:57:50Z",
   "https://hay.toolforge.org/minefield/": "2026-08-10T12:57:50Z",
   "https://hubblesite.org/": "2026-08-10T13:06:16Z",
+  "https://huggingface.co/Cloudflare/clef-flash": "2026-10-16T12:59:07Z",
   "https://huggingface.co/Qwen/Qwen3-14B-FP8": "2026-08-16T03:45:23Z",
   "https://huggingface.co/Qwen/Qwen3.6-27B-FP8": "2026-08-16T03:45:24Z",
   "https://huggingface.co/Qwen/Qwen3.8-27B-FP8": "2026-10-09T10:07:14Z",
@@ -411,6 +415,7 @@
   "https://image-annotator.toolforge.org/": "2026-08-10T12:57:50Z",
   "https://incubator.wikimedia.org": "2026-08-10T12:57:50Z",
   "https://index.commoncrawl.org/CC-MAIN-<id": "2026-10-14T14:26:54Z",
+  "https://inference.svc.eqiad.wmnet:30443/v1/models/<model": "2026-10-16T12:59:04Z",
   "https://inkscape.org": "2026-08-10T12:57:50Z",
   "https://isa.toolforge.org/": "2026-08-10T12:57:50Z",
   "https://iw.toolforge.org/sigma/summary.py": "2026-10-03T13:52:07Z",
@@ -965,6 +970,10 @@
    "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
    "classification": "example"
   },
+  "https://api.wikimedia.org/service/lw/inference/v1/models/llm-clef-flash:predict": {
+   "allow_reason": "Endpoint requires POST, OAuth flow, or query parameters; bare HEAD/GET is not a validity test",
+   "classification": "post_or_parameter_required"
+  },
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1": {
    "allow_reason": "Endpoint requires POST, OAuth flow, or query parameters; bare HEAD/GET is not a validity test",
    "classification": "post_or_parameter_required"
@@ -1266,6 +1275,10 @@
    "classification": "example"
   },
   "https://index.commoncrawl.org/CC-MAIN-<id": {
+   "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
+   "classification": "example"
+  },
+  "https://inference.svc.eqiad.wmnet:30443/v1/models/<model": {
    "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
    "classification": "example"
   },
@@ -1710,7 +1723,7 @@
    "classification": "unicode_domain_example"
   }
  },
- "generated_at": "2026-10-14T14:26:53Z",
+ "generated_at": "2026-10-16T12:59:04Z",
  "generator": "scripts/refresh-url-registry.py",
  "skip": {
   "example": "illustrative placeholder URLs",
@@ -1765,6 +1778,7 @@
   "https://api.wikimedia.org/service/lw/inference/v1/models/enwiki-goodfaith:predict": -2,
   "https://api.wikimedia.org/service/lw/inference/v1/models/langid:predict": -2,
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-<model": -1,
+  "https://api.wikimedia.org/service/lw/inference/v1/models/llm-clef-flash:predict": -2,
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1": -2,
   "https://api.wikimedia.org/service/lw/inference/v1/models/llm-qwen3-14b/openai/v1/chat/completions": 405,
   "https://api.wikimedia.org/service/lw/inference/v1/models/outlink-topic-model:predict": -2,
@@ -1776,6 +1790,7 @@
   "https://api.wikimedia.org/service/lw/inference/v1/models/revertrisk-wikidata:predict": -2,
   "https://api.wikimedia.org/service/lw/recommendation/api/v1/translation": 422,
   "https://api.wikimedia.org/service/lw/recommendation/api/v1/translation?source=en&target=fr&count=3&seed=Apple": 200,
+  "https://api.wikimedia.org/service/lw/specs/openapi.yaml": 200,
   "https://api.wikimedia.org/wiki/Authentication": 200,
   "https://api.wikimedia.org/wiki/Lift_Wing_API": 200,
   "https://api.wikimedia.org/wiki/Lift_Wing_API/Reference": 200,
@@ -2117,9 +2132,11 @@
   "https://gitlab.wikimedia.org/toolforge-repos/my-tool/-/raw/main/config.yaml": -1,
   "https://glamtools.toolforge.org/baglama2/": 200,
   "https://glamtools.toolforge.org/glamorgan.html": 200,
+  "https://grafana.wikimedia.org/d/dpzzsnh/ml-infra": 200,
   "https://hay.toolforge.org/depictor/": 200,
   "https://hay.toolforge.org/minefield/": 200,
   "https://hubblesite.org/": 200,
+  "https://huggingface.co/Cloudflare/clef-flash": 200,
   "https://huggingface.co/Qwen/Qwen3-14B-FP8": 200,
   "https://huggingface.co/Qwen/Qwen3.6-27B-FP8": 200,
   "https://huggingface.co/Qwen/Qwen3.8-27B-FP8": 200,
@@ -2128,6 +2145,7 @@
   "https://image-annotator.toolforge.org/": 200,
   "https://incubator.wikimedia.org": 200,
   "https://index.commoncrawl.org/CC-MAIN-<id": -1,
+  "https://inference.svc.eqiad.wmnet:30443/v1/models/<model": -1,
   "https://inkscape.org": 200,
   "https://isa.toolforge.org/": 200,
   "https://iw.toolforge.org/sigma/summary.py": 200,
