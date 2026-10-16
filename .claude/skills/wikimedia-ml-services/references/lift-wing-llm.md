@@ -1,22 +1,39 @@
 # Lift Wing LLM Endpoints — Session Reference
 
-Captured 2026-08-14; refreshed against Wikitech and live public API 2026-10-07. Lift Wing now serves open-weight LLMs (up to ~30B params) via vLLM on AMD MI300X GPUs (eqiad `ml-serve` nodes). Unusually for Wikimedia, the public interface is **OpenAI-compatible** (`/openai/v1/chat/completions`), not the KServe `:predict` envelope.
+Captured 2026-08-14; refreshed against Wikitech and the live public API **2026-10-16** (Wikitech
+rev 2466734, 2026-10-13). Lift Wing now serves open-weight LLMs (up to ~30B params) on AMD MI300X
+GPUs (eqiad `ml-serve` nodes). The **chat** models run on vLLM and, unusually for Wikimedia, expose
+an **OpenAI-compatible** interface (`/openai/v1/chat/completions`) rather than the KServe `:predict`
+envelope — but not every `llm-*` model does: the task-specific decision model is `:predict`-only
+(see `clef-flash-decision-models.md`).
 
-Canonical docs (both `{{Draft}}` as of capture):
+Canonical docs (both were `{{Draft}}` at first capture; the main page is now the primary reference):
 - https://wikitech.wikimedia.org/wiki/Machine_Learning/LiftWing/Large_Language_Models
 - https://wikitech.wikimedia.org/wiki/Machine_Learning/LiftWing/Large_Language_Models/Wikimania_2026
+  — frozen hackathon quickstart (last edited 2026-08-12). **Its capability table is stale:** it
+  still lists "Tool / function calling" under *Not available yet* and knows only two models. Follow
+  the main page, not this one, for anything current.
 
 ## Models
 
-### Public (general-purpose — in API + Studio)
+Wikitech groups them in three tiers (rev 2466734): public general-purpose (API + Studio), public
+task-specific (API, **not** in Studio), and internal (neither).
+
+### Public — general-purpose (chat route + Studio)
 | Model ID | Base | Precision | Context | GPUs | Notes |
 |---|---|---|---|---|---|
 | `llm-qwen3-14b` | Qwen3-14B-FP8 | FP8 + FP8 KV | 16,384 | 1 | Default general-purpose chat model |
-| `llm-qwen36-27b` | Qwen3.6-27B-FP8 | FP8 + FP8 KV | 32,768 | 1 | Previously largest public model; text-only (multimodal disabled); live 200 on 2026-10-07 |
-| `llm-qwen38-27b` | Qwen3.8-27B-FP8 | FP8 + FP8 KV | 32,768 | 1 | Newer public 27B model; Wikitech says "same as qwen3.6"; live 200 on 2026-10-07 |
-| `llm-gpt-oss-safeguard-20b` | gpt-oss-safeguard-20b, ~20B MoE | MXFP4 | 16,384 | 2 (TP) | Listed by Wikitech as public safeguard/policy-violation model, but public chat route returned 404 on 2026-10-07 |
+| `llm-qwen36-27b` | Qwen3.6-27B-FP8 | FP8 + FP8 KV | 32,768 | 1 | Still served; text-only (multimodal disabled) |
+| `llm-qwen38-27b` | Qwen3.8-27B-FP8 | FP8 + FP8 KV | 32,768 | 1 | Newer 27B model; Wikitech says "same as qwen3.6"; live 200 on 2026-10-16 (32K ceiling re-confirmed by a 32,769-token prompt → `VLLMValidationError … maximum context length is 32768`) |
+| `llm-gpt-oss-safeguard-20b` | gpt-oss-safeguard-20b, ~20B MoE | MXFP4 | 16,384 | 2 (TP) | Public safeguard/policy-violation classifier. **Chat route 404s**, but `…:predict` with `{"messages": […]}` works (HTTP 200, 1.4–2.2 s, returns `{"reasoning": …, "verdict": …}`) — verified 2026-10-16 |
+
+### Public — task-specific (API, NOT in Studio)
+| Model ID | Type | Precision | Context | GPUs | Notes |
+|---|---|---|---|---|---|
+| `llm-clef-flash` | Decision model — [clef-flash](https://huggingface.co/Cloudflare/clef-flash) 9B multimodal | BF16 | 16,384 | 1 | **`:predict` only** — no OpenAI route (404), not in Studio, HF transformers backend (no vLLM). Typed `questions` in, one probability/expected value per question out. Full contract, caps, timings: `clef-flash-decision-models.md` |
 
 ### Internal (NOT public, NOT in Studio)
+
 | Model ID | Type | Precision | Purpose |
 |---|---|---|---|
 | `cope-b-a4b` | Zentropi CoPE-B, 26B MoE / ~4B active | bf16 | policy-violation detection |
@@ -44,7 +61,23 @@ resp = client.chat.completions.create(
 )
 ```
 
-Note: the LiftWing OpenAPI spec (`/service/lw/specs/openapi.yaml`) now includes the generic LLM chat-completions path, but model availability still comes from Wikitech plus a live smoke test.
+Note: the LiftWing OpenAPI spec (`/service/lw/specs/openapi.yaml`) now includes the generic LLM chat-completions path, but model availability still comes from Wikitech plus a live smoke test. It does **not** list the decision-model route.
+
+### Which route does this model use?
+
+Every `llm-*` model is `:predict`-capable, but the payload differs by model, and only the chat
+models answer the OpenAI route. Check before wiring a client (all four verified 2026-10-16):
+
+| Model | OpenAI chat route | KServe `:predict` payload |
+|---|---|---|
+| `llm-qwen3-14b`, `llm-qwen36-27b`, `llm-qwen38-27b` | ✅ 200 | `{"model": …, "prompt": "<string>", "max_tokens": N}` → `{"model_name", "response", "prompt_tokens", "completion_tokens"}`. Sending `messages` here → 400 `Expected a 'prompt' field (string) in the payload.` |
+| `llm-gpt-oss-safeguard-20b` | ❌ 404 | `{"messages": [{"role": "user", "content": …}]}` → 200 `{"reasoning", "verdict"}` (1.4–2.2 s) |
+| `llm-clef-flash` | ❌ 404 | state + typed `questions` (+ optional base64 `images`) — see `clef-flash-decision-models.md` |
+
+Internal clients and deployment charts should use the in-cluster KServe endpoint
+`https://inference.svc.eqiad.wmnet:30443/v1/models/<model>:predict` with its `Host` header —
+**eqiad, not `inference.discovery.wmnet`**, which can resolve to codfw and 404 (Wikitech
+§"KServe Predict Endpoint").
 
 ## Rate limits (policy `LiftWingLLM`, phab T426749)
 | Client class | Limit | Who |
@@ -71,6 +104,26 @@ LiftWing Studio runs on Cloud VPS, so it rides the unlimited tier (the gateway s
 - Fixed training cutoff, no live data unless you wire tools → do NOT trust for time-sensitive facts; retrieve current content yourself, include it as context, or run a tool-calling loop.
 - Wikitech documents hosted tools (`current_date`, `wikipedia_semantic_search`) and an MCP/tool-calling loop example; the model alone will not fetch current data.
 
+### Tool calling: who runs the tool
+
+The model-server never executes a tool. It returns a structured request and your client runs it,
+then sends the result back as a `role: "tool"` message — the standard OpenAI tool-calling loop
+(several requests per answer). Wikitech documents two loops: **option 1, client-owned** (supported
+today) and **option 2, orchestrator-owned** (planned).
+
+LiftWing also hosts a shared **tool-server** (FastAPI, T436892, live since 2026-09-14) that serves
+the same tools over REST (`/v1/tools/<tool-name>`, OpenAPI at `/openapi.json`) and MCP (`/mcp`,
+via FastMCP). It is **internal-only** — `tool-server.discovery.wmnet:31443`, not exposed on
+`api.wikimedia.org` — so from outside the production network you must supply your own tools.
+Source: `src/models/tool_server` in
+`wikimedia/machinelearning-liftwing-inference-services` (that repo also ships a runnable
+`tool_calling_loop.py` example client).
+
+### Observability
+
+vLLM Prometheus metrics are emitted by every LLM service (T431136). GPU/VRAM and per-service
+dashboards: `https://grafana.wikimedia.org/d/dpzzsnh/ml-infra` (WIP; tracked in T429597).
+
 ## Benchmarks (llm-qwen36-27b FP8, internal endpoint, single replica, 2026-07-17)
 | Concurrency | Req/s | Output tok/s | TTFT p50 (ms) | TTFT p99 (ms) | E2EL p50 (ms) | E2EL p99 (ms) |
 |---|---|---|---|---|---|---|
@@ -85,6 +138,16 @@ LiftWing Studio runs on Cloud VPS, so it rides the unlimited tier (the gateway s
 ## Data & privacy
 - **API:** persists nothing — prompts/responses not logged, not retained, not used for training. Each request is independent (send full context each time).
 - **LiftWing Studio:** saves chats to its DB by default (and they can be shared). Use a "temporary chat" to avoid persistence.
+
+## LiftWing Studio internals
+
+Studio is three Docker services on a Cloud VPS instance: **Open WebUI** (front end — chat history,
+document uploads, model picker), a **LiteLLM** shim that presents the LiftWing models in OpenAI
+format, and an **nginx shim** that strips the `Authorization` header and adds the required
+`Api-User-Agent` header. Only `llm-*` general-purpose models appear — internal models and the
+decision model are absent, and a "model" added to the Studio config is just a `litellm-config.yaml`
+entry. Because it runs on Cloud VPS, Studio rides the unlimited rate-limit tier (the gateway sees
+it as one WMCS client), so any per-user limits are Studio's own.
 
 ## Word-on-the-street caveats
 - WMF publishes **serving-performance benchmarks only, NOT task quality** — validate on your own examples.
@@ -101,6 +164,7 @@ LiftWing Studio runs on Cloud VPS, so it rides the unlimited tier (the gateway s
 - 2026-10-07: 1-token public API smoke tests: `llm-qwen36-27b` → HTTP 200, `llm-qwen38-27b` → HTTP 200, `llm-gpt-oss-safeguard-20b` → HTTP 404 (`{"detail":"Not Found"}`).
 - 2026-10-07 quick 3-prompt comparison (non-streaming, `max_tokens=32`, same prompts): `llm-qwen36-27b` returned 3/3 HTTP 200 with median 0.653 s (range 0.205–0.753 s); `llm-qwen38-27b` returned 3/3 HTTP 200 with median 0.610 s (range 0.244–0.994 s). Both were responsive; no 429/5xx observed.
 - 2026-10-07 feature smoke test: both `llm-qwen36-27b` and `llm-qwen38-27b` produced OpenAI-style `tool_calls` with `tool_choice: "auto"`; both returned the same HTTP 400 for named/required `tool_choice` (`tool_choice must be "auto" or "none"; "required" and named functions are not supported`). Both accepted `reasoning_effort: "low"` and `chat_template_kwargs: {"enable_thinking": false}` on a simple arithmetic prompt and returned the same final answer, but Wikitech does not document a public "thinking level" control — only the possibility of `<think>…</think>` tags — so treat thinking controls as unverified/possibly ignored.
+- 2026-10-16 (refresh for Wikitech rev 2466734): `llm-qwen38-27b` chat 200; a 32,769-token prompt returned HTTP 500 `VLLMValidationError … maximum context length is 32768` → 32K ceiling confirmed for the new model; `llm-clef-flash:predict` 200 in 0.137–0.161 s with typed `answers` and `usage.output_tokens == 0`; `llm-clef-flash` chat route **404** (control `llm-qwen3-14b` 200); `llm-gpt-oss-safeguard-20b` chat route 404 but `:predict` with `{"messages": […]}` **200** in 1.4–2.2 s returning `{"reasoning", "verdict"}`; `llm-qwen38-27b:predict` rejects `messages` (400 `Expected a 'prompt' field (string)`) and accepts `{"prompt": …}` → 200.
 
 ## Task benchmark — llm-qwen36-27b (2026-08-18)
 
