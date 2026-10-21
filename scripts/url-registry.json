@@ -470,10 +470,12 @@
   "https://meta.wikimedia.org/wiki/Suppression": "2026-08-10T12:57:50Z",
   "https://meta.wikimedia.org/wiki/Toolhub": "2026-10-05T08:49:29Z",
   "https://meta.wikimedia.org/wiki/Web2Cit": "2026-08-10T12:57:50Z",
+  "https://my-build-tool.toolforge.org/api/about": "2026-10-20T12:27:29Z",
   "https://my-python-tool.toolforge.org/": "2026-08-10T12:57:50Z",
   "https://my-python-tool.toolforge.org/api/hello": "2026-08-10T12:57:50Z",
   "https://my-python-tool.toolforge.org/docs": "2026-08-10T12:57:50Z",
   "https://my-tool.toolforge.org/": "2026-08-10T12:57:50Z",
+  "https://my-tool.toolforge.org/api/about": "2026-10-20T12:27:29Z",
   "https://my-tool.toolforge.org/api/hello": "2026-08-10T12:57:50Z",
   "https://my-tool.toolforge.org/oauth/callback": "2026-08-10T12:57:50Z",
   "https://nature.com/articles/profile": "2026-08-10T12:57:50Z",
@@ -1351,6 +1353,10 @@
    "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
    "classification": "example"
   },
+  "https://my-build-tool.toolforge.org/api/about": {
+   "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
+   "classification": "example"
+  },
   "https://my-python-tool.toolforge.org/": {
    "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
    "classification": "example"
@@ -1364,6 +1370,10 @@
    "classification": "example"
   },
   "https://my-tool.toolforge.org/": {
+   "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
+   "classification": "example"
+  },
+  "https://my-tool.toolforge.org/api/about": {
    "allow_reason": "Illustrative placeholder or code fragment, not a literal URL to verify",
    "classification": "example"
   },
@@ -1724,7 +1734,7 @@
    "classification": "unicode_domain_example"
   }
  },
- "generated_at": "2026-10-16T12:59:04Z",
+ "generated_at": "2026-10-20T12:27:29Z",
  "generator": "scripts/refresh-url-registry.py",
  "skip": {
   "example": "illustrative placeholder URLs",
@@ -2201,10 +2211,12 @@
   "https://meta.wikimedia.org/wiki/Suppression": 200,
   "https://meta.wikimedia.org/wiki/Toolhub": 200,
   "https://meta.wikimedia.org/wiki/Web2Cit": 200,
+  "https://my-build-tool.toolforge.org/api/about": -1,
   "https://my-python-tool.toolforge.org/": -1,
   "https://my-python-tool.toolforge.org/api/hello": -1,
   "https://my-python-tool.toolforge.org/docs": -1,
   "https://my-tool.toolforge.org/": -1,
+  "https://my-tool.toolforge.org/api/about": -1,
   "https://my-tool.toolforge.org/api/hello": -1,
   "https://my-tool.toolforge.org/oauth/callback": -1,
   "https://nature.com/articles/profile": 303,
