@@ -313,7 +313,7 @@
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Olympics/Popular_pages": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Parapsychology/Resources": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Physics": "2026-08-10T12:57:50Z",
-  "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Physics/Assessment": "2026-08-10T13:06:01Z",
+  "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Physics/Assessment": "2026-10-22T22:40:44Z",
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Physics/Popular_pages": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Politics/Assessment": "2026-08-10T12:57:50Z",
   "https://en.wikipedia.org/wiki/Wikipedia:WikiProject_Politics/Popular_pages": "2026-08-10T12:57:50Z",
@@ -372,6 +372,7 @@
   "https://github.com/epfl-dlab/WikiHist.html": "2026-09-14T21:06:35Z",
   "https://github.com/epfl-dlab/enwiki_history_to_html": "2026-09-14T21:06:36Z",
   "https://github.com/flickr/flickr-api-swagger": "2026-08-10T12:57:50Z",
+  "https://github.com/fuzheado/wikibento/blob/main/docs/research/TOOLFORGE-INCIDENT-2026-10-22.md": "2026-10-22T22:40:45Z",
   "https://github.com/jentic/jentic-public-apis": "2026-08-10T12:57:50Z",
   "https://github.com/philippesaade-wmde/WikidataTextEmbedding": "2026-10-05T19:30:39Z",
   "https://github.com/scour-project/scour": "2026-08-10T12:57:50Z",
@@ -1735,7 +1736,7 @@
    "classification": "unicode_domain_example"
   }
  },
- "generated_at": "2026-10-20T12:27:29Z",
+ "generated_at": "2026-10-22T22:40:43Z",
  "generator": "scripts/refresh-url-registry.py",
  "skip": {
   "example": "illustrative placeholder URLs",
@@ -2114,6 +2115,7 @@
   "https://github.com/epfl-dlab/WikiHist.html": 200,
   "https://github.com/epfl-dlab/enwiki_history_to_html": 200,
   "https://github.com/flickr/flickr-api-swagger": 200,
+  "https://github.com/fuzheado/wikibento/blob/main/docs/research/TOOLFORGE-INCIDENT-2026-10-22.md": 200,
   "https://github.com/jentic/jentic-public-apis": 200,
   "https://github.com/philippesaade-wmde/WikidataTextEmbedding": 200,
   "https://github.com/scour-project/scour": 200,
@@ -2587,5 +2589,5 @@
   "https://your-tool.toolforge.org": -1,
   "https://\u0440\u0443.wikipedia.org": 0
  },
- "user_agent": "wikipedia-ai-skills-url-registry/1.0 (https://github.com/fuzheado/Wikipedia-AI-Skills)"
+ "user_agent": "WikipediaSkill/1.0 (https://github.com/fuzheado/Wikipedia-AI-Skills; andrew.lih@gmail.com) ContentGapResearch"
 }
